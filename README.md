@@ -1,2 +1,10 @@
-# -otTG_activity_tracking
-A Telegram bot that helps the user calculate daily water and calorie intake, as well as track workouts and nutrition.
+# ДЗ-2 продвинутый python ИИ24
+Сушкова Дарья Сергеевна
+
+### Структура проекта
+TODO
+### Уточнения ТЗ
+TODO
+### Демонстрация работы
+TODO
+
