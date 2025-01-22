@@ -7,9 +7,11 @@ class Profile(StatesGroup):
     '''
     Состояние заполнения профиля.
     '''
+
     weight = State()
     height = State()
     age = State()
+    gender = State()
     activity = State()
     activity_type = State()
     city = State()

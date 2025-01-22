@@ -5,7 +5,7 @@ from states import Profile
 from aiogram.filters.state import StateFilter
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 
-from utils import calc_water_intake, open_weather_api, open_food_fact_api, calc_calories_intake, plot_water_chart, plot_calories_chart
+from utils import calc_water_intake, open_weather_api, open_food_fact_api, calc_calories_intake, calc_workout, plot_water_chart, plot_calories_chart
 
 
 # Роутер обработчиков воды, еды и калорий.
@@ -13,9 +13,6 @@ router = Router()
 
 # Хранилища данных пользователей
 users = {}
-# user_profiles = {}
-# user_water_log = {}
-# user_workout_log = {}
 
 
 # Клавиатура для выбора типа активности.
@@ -33,6 +30,7 @@ activity_keyboard = InlineKeyboardMarkup(
 @router.message(Command('start'))
 async def send_welcome(message: types.Message):
     """Приветственное сообщение."""
+
     await message.reply(
         "Привет! Я бот, помогающий отслеживать ваш профиль.\n"
         "Используйте /set_profile для настройки профиля.\n"
@@ -43,6 +41,7 @@ async def send_welcome(message: types.Message):
 @router.message(Command('help'))
 async def show_help(message: types.Message):
     """Вспомогательная команда."""
+
     await message.reply(
         "Бот предоставляет следующие команды:\n"
         "1) /set_profile - настройка профиля, без параметров. "
@@ -53,11 +52,13 @@ async def show_help(message: types.Message):
 @router.message(Command('set_profile'))
 async def set_profile(message: types.Message, state: FSMContext):
     """Начало настройки профиля."""
+
     user_id = message.from_user.id
     users[user_id] = {
         "weight": None,
         "height": None,
         "age": None,
+        "gender": None,
         "activity": None,
         "activity_type": None,
         "city": None,
@@ -67,6 +68,7 @@ async def set_profile(message: types.Message, state: FSMContext):
         "logged_calories": 0,
         "burned_calories": 0
     }
+
     await state.set_state(Profile.weight)
     await message.reply("Введите ваш вес в килограммах:")
 
@@ -74,6 +76,7 @@ async def set_profile(message: types.Message, state: FSMContext):
 @router.message(Profile.weight)
 async def process_weight(message: types.Message, state: FSMContext):
     """Обработка введенного веса."""
+
     try:
         weight = float(message.text)
         if weight < 0:
@@ -91,6 +94,7 @@ async def process_weight(message: types.Message, state: FSMContext):
 @router.message(Profile.height)
 async def process_height(message: types.Message, state: FSMContext):
     """Обработка введенного роста."""
+
     try:
         height = float(message.text)
         if height < 0:
@@ -108,6 +112,7 @@ async def process_height(message: types.Message, state: FSMContext):
 @router.message(Profile.age)
 async def process_age(message: types.Message, state: FSMContext):
     """Обработка введенного возраста."""
+
     try:
         age = int(message.text)
         if age < 0:
@@ -116,15 +121,34 @@ async def process_age(message: types.Message, state: FSMContext):
         users[user_id]['age'] = age
 
         await state.update_data(age=age)
-        await state.set_state(Profile.activity)
-        await message.reply("Введите ваш уровень активности в минутах в день:")
+        await state.set_state(Profile.gender)
+        await message.reply("Укажите Ваш пол - мужской (м) или женский (ж):")
     except ValueError:
         await message.reply("Пожалуйста, введите полное количество лет.")
+
+
+@router.message(Profile.gender)
+async def process_gender(message: types.Message, state: FSMContext):
+    """Обработка введенного пола."""
+
+    try:
+        gender = message.text.lower()
+        if gender not in ['м', 'ж']:
+            raise ValueError
+        user_id = message.from_user.id
+        users[user_id]['gender'] = gender
+
+        await state.update_data(gender=gender)
+        await state.set_state(Profile.activity)
+        await message.reply("Введите Ваш уровень активности в минутах в день:")
+    except ValueError:
+        await message.reply("Пожалуйста, введите пол в формате 'м' или 'ж'.")
 
 
 @router.message(Profile.activity)
 async def process_activity(message: types.Message, state: FSMContext):
     """Обработка введенного уровня активности в минутах."""
+
     try:
         activity_minutes = int(message.text)
         if activity_minutes < 0 or activity_minutes > 1440:
@@ -134,7 +158,7 @@ async def process_activity(message: types.Message, state: FSMContext):
 
         await state.update_data(activity=activity_minutes)
         await state.set_state(Profile.activity_type)
-        await message.reply("Выберите наиболее подходящий тип активности:", reply_markup=activity_keyboard)
+        await message.reply(f"Выберите наиболее подходящий тип активности:", reply_markup=activity_keyboard)
     except ValueError:
         await message.reply("Пожалуйста, введите целое валидное значение минут в день.")
 
@@ -167,27 +191,36 @@ async def process_activity_type(callback_query: types.CallbackQuery, state: FSMC
 @router.message(Profile.city)
 async def process_city(message: types.Message, state: FSMContext):
     """Обработка введенного города."""
-    # TODO: добавить обработку невалидного города
-    city = message.text
-    user_id = message.from_user.id
-    users[user_id]['city'] = city
+    
+    try:
+        city = message.text.title()
+        if city == '+':
+            city = 'Москва'
+        user_id = message.from_user.id
+        users[user_id]['city'] = city
 
-    await state.update_data(city=city)
+        await state.update_data(city=city)
 
-    # Извлекаем данные состояния.
-    data = await state.get_data()
-    weight = data.get('weight')
-    activity = data.get('activity')
-    # Расчет температуры и нормы воды.
-    temperature =  await open_weather_api(city) if city else 20
-    water_goal = calc_water_intake(weight, activity, temperature)
-    users[user_id]['water_goal'] = water_goal
+        # Извлекаем данные состояния.
+        data = await state.get_data()
+        weight = data.get('weight')
+        activity = data.get('activity')
+        # Расчет температуры и нормы воды.
+        temperature =  await open_weather_api(city) if city else 20
+        water_goal = calc_water_intake(weight, activity, temperature)
+        users[user_id]['water_goal'] = water_goal
 
-    await state.set_state(Profile.calorie_goal)
-    await message.reply(
-        f"На текущий момент для города {city} ({temperature}) норма воды - {water_goal} мл в день.\n"
-        "Введите вашу дневную цель калорий (или отправьте '-' для автоматического расчета):"
-    )
+        await state.set_state(Profile.calorie_goal)
+        await message.reply(
+            f"На текущий момент в городе {city} {temperature} градусов Цельсия.\n"
+            "Введите вашу дневную цель калорий (или отправьте '-' для автоматического расчета):"
+        )
+    except ValueError:
+        await message.reply(
+            "Введен невалидный город, попробуйте снова.\n"
+            "Если Вы уверены, что верно ввели название города - отправьте '+'. "
+            "В таком случае будет присвоен город по умолчанию - Москва."
+        )
 
 
 @router.message(Profile.calorie_goal)
@@ -199,11 +232,13 @@ async def process_calorie_goal(message: types.Message, state: FSMContext):
     weight = data['weight']
     height = data['height']
     age = data['age']
+    gender = data['gender']
     activity = data['activity']
+    activity_type = data['activity_type']
 
     # Автоматический расчет нормы калорий.
     if calorie_goal_str == '-':
-        calorie_goal = calc_calories_intake(weight, height, age, activity)
+        calorie_goal = calc_calories_intake(weight, height, gender, age, activity, activity_type)
     # Введенная пользователем цель.
     else:
         try:
@@ -215,29 +250,30 @@ async def process_calorie_goal(message: types.Message, state: FSMContext):
 
     user_id = message.from_user.id
     users[user_id]['calorie_goal'] = calorie_goal
-
     await state.update_data(calorie_goal=calorie_goal)
 
-    activity_type = data['activity_type']
     city = data['city']
+    water_goal = users[user_id]['water_goal']
 
     # Ответ с заполненным профилем пользователя
     summary = (
-        f"Ваш профиль:\n"
+        f"\U0001F4CE Ваш профиль:\n"
         f"Вес: {weight} кг\n"
         f"Рост: {height} см\n"
         f"Возраст: {age} лет\n"
-        f"Уровень активности: {activity} минут в день\n"
-        f"Предпочтительный тип активности: {activity_type}\n"
-        f"Город: {city}\n"
-        f"Цель калорий: {calorie_goal} ккал"
+        f"Пол: {'женский' if gender == 'ж' else 'мужской'},\n"
+        f"Уровень активности: {activity} минут в день,\n"
+        f"Предпочтительный тип активности: {activity_type},\n"
+        f"Город: {city},\n"
+        f"Норма воды: {water_goal},\n"
+        f"Цель калорий: {calorie_goal} ккал."
     )
     await message.reply(summary)
     await state.clear()
 
 
 @router.message(Command('log_water'))
-async def log_water(message: types.Message, state: FSMContext):
+async def log_water(message: types.Message):
     """Обработка команды логирования воды."""
 
     user_id = message.from_user.id
@@ -253,7 +289,7 @@ async def log_water(message: types.Message, state: FSMContext):
     try:
         amount = float(args[1])
         if amount <= 0:
-            raise ValueError("Количество должно быть положительным.")
+            raise ValueError("Количество должно быть положительным числом.")
 
         # Обновление логов воды
         users[user_id]['logged_water'] += amount
@@ -261,17 +297,18 @@ async def log_water(message: types.Message, state: FSMContext):
         remains = max(0, users[user_id]['water_goal'] - users[user_id]['logged_water'])
 
         await message.reply(
-            f"Вы выпили {amount} мл воды;\n"
+            f"\U0001F4A7 Вы выпили {amount} мл воды;\n"
             f"Всего за день выпито: {users[user_id]['logged_water']} мл;\n"
-            f"Осталось до дневной нормы: {remains:.2f} мл."
+            f"Осталось до выполнения дневной нормы: {remains:.2f} мл."
         )
     except ValueError:
-        await message.reply("Пожалуйста, укажите количество воды в виде положительного числа.")
+        await message.reply("Пожалуйста, укажите количество воды в виде одного положительного числа.")
 
 
 @router.message(Command('log_food'))
-async def log_water(message: types.Message, state: FSMContext):
+async def log_water(message: types.Message):
     """Обработка команды логирования еды."""
+
     user_id = message.from_user.id
     if user_id not in users:
         await message.answer("Пожалуйста, настройте профиль с помощью команды /set_profile.")
@@ -291,13 +328,15 @@ async def log_water(message: types.Message, state: FSMContext):
             product_weight = 100.0
         else:
             product_weight = float(product_data[1])
+            if product_weight <= 0:
+                raise ValueError("Граммовка должна быть положительным числом.")
         
         # Количество калорий через API.
         calories = await open_food_fact_api(product_name, product_weight)
         users[user_id]['logged_calories'] += calories
 
         await message.reply(
-            f"Продукт: {product_name}, вес: {product_weight} г, калорий: {calories:.2f};\n"
+            f"\U0001F355 Продукт: {product_name}, вес: {product_weight} г, калорий: {calories:.2f};\n"
             f"Всего потреблено за день: {users[user_id]['logged_calories']:.2f} ккал."
         )
 
@@ -308,6 +347,7 @@ async def log_water(message: types.Message, state: FSMContext):
 @router.message(Command('log_workout'))
 async def log_workout(message: types.Message):
     """Обработка команды логирования тренировки."""
+
     user_id = message.from_user.id
     if user_id not in users:
         await message.answer("Пожалуйста, настройте профиль с помощью команды /set_profile.")
@@ -323,36 +363,22 @@ async def log_workout(message: types.Message):
         workout_time = int(args[2])
 
         if workout_time <= 0:
-            raise ValueError("Время должно быть положительным целым числом.")
-
-        # Расчет калорий и воды
-        calories = 0
-        water_opt = 0
-
-        # Учет разных типов тренировок.
-        if workout_type == "бег":
-            calories = workout_time * 10
-            water_opt = (workout_time // 30) * 200
-        elif workout_type == "йога":
-            calories = workout_time * 5
-            water_opt = (workout_time // 30) * 150
-        elif workout_type == "плавание":
-            calories = workout_time * 8
-            water_opt = (workout_time // 30) * 250
-        elif workout_type == "силовая":
-            calories = workout_time * 7
-            water_opt = (workout_time // 30) * 200
-        else:
+            raise ValueError("Время должно быть положительным целым числом минут.")
+        
+        if workout_type not in ['бег', 'йога', 'плавание', 'силовая']:
             await message.reply("Неизвестный тип тренировки. Доступные варианты: бег, йога, плавание, силовая.")
             return
+
+        # Расчет калорий и воды.
+        calories, water_opt = calc_workout(workout_type, workout_time)
 
         # Логируем данные о сожженных калориях. 
         users[user_id]['burned_calories'] += calories
         users[user_id]['water_goal'] += water_opt
 
         await message.reply(
-            f"🏋️‍♂️ {workout_type.capitalize()} {workout_time} минут — сожжено {calories} ккал.\n"
-            f"Дневная норма воды с учетом тренировки: {users[user_id]['water_goal']},"
+            f"\U0001F3CB {workout_type.capitalize()} {workout_time} минут — сожжено {calories} ккал.\n"
+            f"Дневная норма воды с учетом тренировки: {users[user_id]['water_goal']},\n"
             f"Дополнительно выпейте {water_opt} мл воды."
         )
 
@@ -363,7 +389,7 @@ async def log_workout(message: types.Message):
 @router.message(Command("check_progress"))
 async def check_progress(message: types.Message):
     """Обработка команды вывода прогресса."""
-    # TODO: добавить графики
+
     user_id = message.from_user.id
     if user_id not in users:
         await message.reply("Пожалуйста, сначала настройте профиль через команду /set_profile.")
@@ -382,7 +408,7 @@ async def check_progress(message: types.Message):
     calorie_goal = user_data['calorie_goal']
     calorie_log = user_data['logged_calories']
     calorie_burned = user_data['burned_calories']
-    calorie_balance = calorie_goal - calorie_log + calorie_burned
+    calorie_balance = calorie_log - calorie_burned
     calorie_chart = plot_calories_chart(calorie_goal, calorie_log, calorie_burned)
     calorie_file = BufferedInputFile(calorie_chart.getvalue(), filename="calorie_progress.png")
 
@@ -404,11 +430,38 @@ async def check_progress(message: types.Message):
 @router.message(Command("new_day"))
 async def fix_new_day(message: types.Message):
     """Обработка команды фиксирования нового дня."""
+    
+    # TODO: добавить резы по балансу и воде за пред день.
     user_id = message.from_user.id
     if user_id not in users:
         await message.reply("Пожалуйста, сначала настройте профиль через команду /set_profile.")
         return
     
+    # Предыдущие значения.
+    user_data = users[user_id]
+    
+    water_log = user_data['logged_water']
+    water_goal = user_data['water_goal']
+    water_remain = max(0, water_goal - water_log)
+    if water_remain == 0:
+        water_str = f"Дневная норма воды в {water_goal} мл выполнена,\n"
+    else:
+        water_str = f"Дневная норма воды не выполнена, недобор в {water_remain} мл,\n"
+
+    calorie_log = user_data['logged_calories']
+    calorie_burned = user_data['burned_calories']
+    calorie_balance = calorie_log - calorie_burned
+    if calorie_balance > 0:
+        cal_str = f"Баланс калорий положительный ({calorie_balance} ккал), ожидаем набор веса."
+    elif calorie_balance < 0:
+        cal_str = f"Баланс калорий отрицательный ({calorie_balance} ккал), ожидаема потеря веса."
+    else:
+        cal_str = f"Нейтральный баланс калорий, ожидаем стабильный вес."
+
+    prev_day_stat = f"\U0001F519 Статистика за предыдущий день:\n" + water_str + cal_str
+    
+    await message.reply(prev_day_stat)
+
     # Обнуление логов по воде и калориям.
     users[user_id]['logged_water'] = 0
     users[user_id]['logged_calories'] = 0
@@ -422,8 +475,30 @@ async def fix_new_day(message: types.Message):
     water_goal = calc_water_intake(weight, activity, temperature)
 
     await message.answer(
-        "Прогресс на новый день успешно сброшен!\n"
-        f"Текущая норма воды для города {city} ({temperature}) - {water_goal} мл в день."
+        f"\U0001F51C Прогресс на новый день успешно сброшен!\n"
+        f"Текущая норма воды для города {city} ({temperature}) - {water_goal} мл в день.\n"
     )
 
-    
+
+@router.message(Command("profile_info"))
+async def get_profile_info(message: types.Message):
+    """Обработка запроса получения информации о профиле."""
+
+    user_id = message.from_user.id
+    if user_id not in users:
+        await message.reply("Пожалуйста, сначала настройте профиль через команду /set_profile.")
+        return
+ 
+    user_data = users[user_id]
+    await message.reply(
+        f"\U0001F4CC Текущая информация в Вашем профиле:\n"
+        f"Вес: {user_data['weight']} кг,\n"
+        f"Рост: {user_data['height']} см,\n"
+        f"Возраст: {user_data['age']} лет,\n"
+        f"Пол: {'женский' if user_data['gender'] == 'ж' else 'мужской'},\n"
+        f"Активность: {user_data['activity']} минут в день,\n"
+        f"Тип активности: {user_data['activity_type']},\n"
+        f"Город: {user_data['city']},\n"
+        f"Норма воды: {user_data['water_goal']} мл в день,\n"
+        f"Цель калорий: {user_data['calorie_goal']} ккал в день."
+    )
