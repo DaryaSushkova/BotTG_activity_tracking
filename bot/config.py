@@ -3,10 +3,13 @@ from dotenv import load_dotenv
 import logging
 
 
-# Логирование при отладке
-logging.basicConfig(level=logging.DEBUG)
-aiohttp_logger = logging.getLogger("aiohttp")
-aiohttp_logger.setLevel(logging.DEBUG)
+# Настройка логирования.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+# Настройка логов aiogram.
+logging.getLogger("aiogram.event").setLevel(logging.WARNING)
+# Пользовательский логгер.
+logger = logging.getLogger("bot_logger")
+logger.setLevel(logging.INFO)
 
 # Загрузка переменных из .env файла
 load_dotenv()

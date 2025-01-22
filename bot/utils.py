@@ -105,16 +105,16 @@ def calc_workout(workout_type: str, workout_time: int):
 
     # Учет разных типов тренировок.
     if workout_type == "бег":
-        calories = workout_time * 10
+        calories = workout_time * ACTIVITY_CALORIES.get(workout_type.lower(), 0)
         water_opt = (workout_time // 30) * 200
     elif workout_type == "йога":
-        calories = workout_time * 5
+        calories = workout_time * ACTIVITY_CALORIES.get(workout_type.lower(), 0)
         water_opt = (workout_time // 30) * 150
     elif workout_type == "плавание":
-        calories = workout_time * 8
+        calories = workout_time * ACTIVITY_CALORIES.get(workout_type.lower(), 0)
         water_opt = (workout_time // 30) * 250
     elif workout_type == "силовая":
-        calories = workout_time * 7
+        calories = workout_time * ACTIVITY_CALORIES.get(workout_type.lower(), 0)
         water_opt = (workout_time // 30) * 200
 
     return calories, water_opt
