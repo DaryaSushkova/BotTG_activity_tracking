@@ -154,6 +154,7 @@ def plot_calories_chart(calories_goal, calories_logged, calories_burned):
     plt.bar(categories, values, color=colors)
     plt.title("Прогресс калорий")
     plt.ylabel("Калории (ккал)")
+    plt.grid(True)
 
     # Сохранение графика в байтовый объект.
     buffer = io.BytesIO()

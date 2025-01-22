@@ -46,9 +46,34 @@ async def show_help(message: types.Message):
 
     logger.info(f"/help: пользователь {message.from_user.id} вызвал помощь.")
     await message.reply(
-        "\U0001F441 Бот предоставляет следующие команды:\n"
-        "1) /set_profile - настройка профиля, без параметров. "
-        "Числовые характеристики должны быть положительными, возраст - целым."
+        "\U0001F441 Бот предоставляет следующие команды:\n\n"
+        "1) */set_profile* - настройка профиля, без параметров.\n"
+        "Числовые характеристики должны быть положительными, возраст и минуты активности - целыми.\n"
+        "Для выбора пола нужно отправить 'м' (мужской) или 'ж' (женский).\n"
+        "Команда также подходит для изменения профиля.\n\n"
+        "2) */log_water <water_ml>* - логирование выпитой воды.\n"
+        "Количество мл воды water\\_ml должно быть положительным."
+        "Указывать количество воды обязательно.\n\n"
+        "3) */log_food <product_name>, <product_g>* - логирование потребленных калорий.\n" 
+        "Указывать продукт product\\_name обязательно, указывать граммовку product\\_g не обязательно.\n"
+        "В случае указания граммовки укажите положительное число через запятую.\n"
+        "В случае пропуска параметра граммовки вес будет считаться как 100 г.\n\n"
+        "4) */log_workout <type> <time>* - логирование тренировки.\n" 
+        "Оба параметра обязательно и разделяются пробелом.\n"
+        "Доступные типы тренировок type: бег, йога, плавание, силовая (любой регистр).\n"
+        "В качестве времени тренировки time укажите целое положительное число минут.\n\n"
+        "5) */check_progress* - текущий прогресс, без параметров.\n" 
+        "Команда приводит текущие результаты по потреблению воды и калориям.\n"
+        "Предоставляются графики прогресса.\n\n"
+        "6) */new_day* - обновление трекинга, без параметров.\n" 
+        "Команда обнуляет текущйи прогресс, приводят его итоговые результаты.\n"
+        "Отсчет по воде и калориям начинается заново, происходит перерасчет нормы воды.\n\n"
+        "7) */profile_info* - информация профиля, без параметров.\n" 
+        "Команда выводит текущие данные профиля.\n\n"
+        "\U0001F6D1 ВАЖНО:\n"
+        "- разделителем для чисел с плавающей точкой является точка '.';\n"
+        "- перед выполнением команд логирования / прогресса заполните профиль!",
+        parse_mode="Markdown"
     )
 
 
@@ -187,21 +212,29 @@ async def process_activity_type(callback_query: types.CallbackQuery, state: FSMC
         "activity:swimming": "Плавание",
         "activity:strength": "Силовая"
     }
-    activity_type = activity_type_mapping.get(callback_query.data)
-    
-    if not activity_type:
-        logger.error(f"/set_profile, ошибка выбора типа активности.")
-        await callback_query.answer("Неверный выбор, попробуйте снова:", show_alert=True)
-        return
-    
-    user_id = callback_query.from_user.id
-    users[user_id]['activity_type'] = activity_type
 
-    await state.update_data(activity_type=activity_type)
-    logger.info(f"/set_profile: пользователь {user_id} выбрал тип активности.")
-    await state.set_state(Profile.city)
-    await callback_query.message.answer("Введите ваш город для получения температуры:")
-    await callback_query.answer()
+    try:
+        activity_type = activity_type_mapping.get(callback_query.data)
+        
+        if not activity_type:
+            logger.error(f"/set_profile, ошибка выбора типа активности.")
+            await callback_query.answer("Неверный выбор, попробуйте снова:", show_alert=True)
+            return
+        
+        user_id = callback_query.from_user.id
+        users[user_id]['activity_type'] = activity_type
+
+        await state.update_data(activity_type=activity_type)
+        logger.info(f"/set_profile: пользователь {user_id} выбрал тип активности.")
+        await state.set_state(Profile.city)
+        await callback_query.message.answer(
+            f"Вы выбрали {activity_type}.\n"
+            "Введите ваш город для получения температуры:"
+        )
+        await callback_query.answer()
+    except Exception as e:
+        logger.error(f"/set_profile, ошибка выбора типа активности: {e}")
+        await callback_query.message.answer("Возникли проблемы в работе бота, попробуйте позже.")
 
 
 @router.message(Profile.city)
@@ -266,6 +299,7 @@ async def process_calorie_goal(message: types.Message, state: FSMContext):
         except ValueError as e:
             logger.error(f"/set_profile, ошибка ввода цели по калориям: {e}")
             await message.reply("Введено невалидное значение для калорий, пожалуйста, повторите.")
+            return
 
     user_id = message.from_user.id
     users[user_id]['calorie_goal'] = calorie_goal
