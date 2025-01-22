@@ -36,7 +36,7 @@ async def open_weather_api(city: str):
 
 async def open_food_fact_api(product_name: str, product_weight: float) -> float:
     '''
-    Получение калорийности продукта из Edamam API.
+    Получение калорийности продукта из Open Food Facts.
     '''
 
     params = {
